@@ -40,15 +40,11 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
         interview_score = opponents_scores[i+1] if opponents_scores[i+1] and opponents_scores[i+1] > 0 else None
         opponent_known_scores.append({'written': written_score, 'interview': interview_score})
 
-    # --- CHANGE 2: Conditional Logic for Opponent 1 Score ---
     highlight_opp1 = False
-    # Check if there is at least one opponent
     if total_participants > 1 and user_written != written_cutoff:
-        # If user's score is not the cutoff, force opponent 1 to be the cutoff score for this simulation
         opponent_known_scores[0]['written'] = written_cutoff
         highlight_opp1 = True
 
-    # --- Simulation Logic (unchanged) ---
     promotion_count = 0
     user_total_score = config['score_formula'](user_written, user_interview)
     
@@ -99,12 +95,16 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
     if 'current_run_details' in locals():
         last_run_details = current_run_details
 
-    # --- Prepare outputs for Gradio ---
     probability = promotion_count / NUM_SIMULATIONS
     
-    # --- CHANGE 1: Text update ---
     fig = go.Figure(data=[go.Bar(y=[probability], x=['上岸概率'], text=[f'{probability:.2%}'], textposition='auto')])
-    fig.update_layout(yaxis_range=[0,1], yaxis_tickformat=".0%", title_text="上岸概率", title_x=0.5)
+    fig.update_layout(
+        yaxis_range=[0,1], 
+        yaxis_tickformat=".0%", 
+        title_text="上岸概率", 
+        title_x=0.5,
+        modebar_remove=['toimage', 'zoom', 'pan', 'select', 'lasso2d', 'autoscale']
+    )
     
     if probability > 0.5: face = '😂'
     elif probability > 0.1: face = '🙂'
@@ -121,7 +121,6 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
         row_style = "background-color:#d4edda; font-weight:bold;" if name == 'user' else ""
         role_name = "<b>你</b>" if name == 'user' else name.replace("opponent_", "对手")
         
-        # --- CHANGE 2: Highlight Logic ---
         written_score_cell = f"<td style='border:1px solid #ddd; padding:8px;'>{scores['written']:.2f}</td>"
         if highlight_opp1 and name == "opponent_1":
             written_score_cell = f"<td style='border:1px solid #ddd; padding:8px; background-color:#fff8c4; color:black;'>{scores['written']:.2f} (进面分)</td>"
@@ -129,13 +128,10 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
         table_html += f"""<tr style="{row_style}"><td style="border:1px solid #ddd; padding:8px;">{i}</td><td style="border:1px solid #ddd; padding:8px;">{role_name}</td>{written_score_cell}<td style="border:1px solid #ddd; padding:8px;">{scores['interview']:.2f}</td><td style="border:1px solid #ddd; padding:8px;"><b>{scores['total']:.2f}</b></td></tr>"""
     table_html += "</table>"
     
-    # FIX: Return the raw plotly figure object for older Gradio versions.
-    # The gr.update() wrapper with `figure=` is not supported.
     return fig, gr.update(value=face), gr.update(value=promo_text), gr.update(value=table_html)
 
 # --- 3. Build UI with Gradio ---
 with gr.Blocks(title="考试上岸率模拟") as demo:
-    # --- CHANGE 1: Title update ---
     gr.Markdown("# 考试上岸率模拟")
     gr.Markdown("调整下方参数，实时模拟您在考试中的上岸概率。")
     
@@ -158,16 +154,19 @@ with gr.Blocks(title="考试上岸率模拟") as demo:
         return gr.update(maximum=max_val, value=round(max_val * 0.5))
     exam_type_dd.change(fn=update_slider_max_val, inputs=exam_type_dd, outputs=user_written_slider)
 
-    # --- CHANGE 3: Add Clear Button ---
+    # FIX: Removed the incompatible 'align' argument from gr.Row
+    # and used gr.Column with scale for robust layout control.
     with gr.Row():
-        gr.Markdown("--- \n ### 对手成绩（选填）")
-        clear_btn = gr.Button("清空所有对手成绩")
+        with gr.Column(scale=4):
+            gr.Markdown("--- \n ### 对手成绩（选填）")
+        with gr.Column(scale=1, min_width=50):
+            clear_btn = gr.Button("清空对手成绩")
     
     opponent_inputs_list = []
     opponent_blocks_list = []
     
     with gr.Row():
-        for i in range(4): # First row for opponents 1-4
+        for i in range(4):
             with gr.Column(visible=(i<2), min_width=160) as col:
                 w = gr.Number(label=f"对手{i+1}笔试", value=0, minimum=0, maximum=300)
                 iv = gr.Number(label=f"对手{i+1}面试", value=0, minimum=0, maximum=100)
@@ -175,7 +174,7 @@ with gr.Blocks(title="考试上岸率模拟") as demo:
                 opponent_blocks_list.append(col)
 
     with gr.Row():
-        for i in range(4, 8): # Second row for opponents 5-8
+        for i in range(4, 8):
             with gr.Column(visible=False, min_width=160) as col:
                 w = gr.Number(label=f"对手{i+1}笔试", value=0, minimum=0, maximum=300)
                 iv = gr.Number(label=f"对手{i+1}面试", value=0, minimum=0, maximum=100)
@@ -184,9 +183,8 @@ with gr.Blocks(title="考试上岸率模拟") as demo:
     
     all_inputs_list = inputs_list + opponent_inputs_list
 
-    # --- CHANGE 3: Logic for Clear Button ---
     def clear_opponent_scores():
-        return [0] * 16 # There are 8 opponents * 2 fields = 16 input components
+        return [0] * 16
     clear_btn.click(fn=clear_opponent_scores, inputs=None, outputs=opponent_inputs_list)
 
     def update_opponent_visibility_ui(num_total):
