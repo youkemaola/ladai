@@ -1,4 +1,4 @@
-import gradio as gr
+import gradio as grMore actions
 import numpy as np
 import plotly.graph_objects as go
 import asyncio
@@ -27,11 +27,11 @@ NUM_SIMULATIONS = 10000
 # --- 2. Core Simulation Function ---
 async def run_simulation(exam_type, total_participants, promotion_slots, written_cutoff, user_written, user_interview, *opponents_scores):
     config = EXAM_CONFIG[exam_type]
-    
+
     # --- Data Processing and Validation ---
     total_participants = int(total_participants) if total_participants else 3
     promotion_slots = int(promotion_slots) if promotion_slots else 1
-    
+
     if not (2 <= total_participants <= 9 and 1 <= promotion_slots < total_participants):
         raise gr.Error("输入无效！请检查总人数(2-9)和晋级人数(需小于总人数)。")
 
@@ -44,10 +44,10 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
     # --- Simulation Logic ---
     promotion_count = 0
     user_total_score = config['score_formula'](user_written, user_interview)
-    
+
     num_unknown_written = sum(1 for o in opponent_known_scores if o['written'] is None)
     num_unknown_interview = sum(1 for o in opponent_known_scores if o['interview'] is None)
-    
+
     sim_written_pool, sim_interview_pool = [], []
     if num_unknown_written > 0:
         while len(sim_written_pool) < num_unknown_written * NUM_SIMULATIONS:
@@ -57,7 +57,7 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
         while len(sim_interview_pool) < num_unknown_interview * NUM_SIMULATIONS:
             s = np.random.normal(config['interview_mu'], config['interview_sigma'], 2000)
             sim_interview_pool.extend(s[(s >= 60) & (s <= 100)])
-    
+
     written_pool_idx, interview_pool_idx = 0, 0
     last_run_details = {}
 
@@ -79,26 +79,26 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
             if sim_interview is None:
                 sim_interview = sim_interview_pool[interview_pool_idx]
                 interview_pool_idx += 1
-            
+
             opponent_total_score = config['score_formula'](sim_written, sim_interview)
             all_scores.append(opponent_total_score)
             if is_last_run:
                 current_run_details[f'opponent_{j+1}'] = {'written': sim_written, 'interview': sim_interview, 'total': opponent_total_score}
-        
+
         all_scores.append(user_total_score)
         all_scores.sort(reverse=True)
         if len([s for s in all_scores if s > user_total_score]) < promotion_slots:
             promotion_count += 1
-    
+
     if 'current_run_details' in locals():
         last_run_details = current_run_details
 
     # --- Prepare outputs for Gradio ---
     probability = promotion_count / NUM_SIMULATIONS
-    
+
     fig = go.Figure(data=[go.Bar(y=[probability], x=['晋级概率'], text=[f'{probability:.2%}'], textposition='auto')])
     fig.update_layout(yaxis_range=[0,1], yaxis_tickformat=".0%", title_text="晋级概率", title_x=0.5)
-    
+
     if probability > 0.5: face = '😂'
     elif probability > 0.1: face = '🙂'
     else: face = '😭'
@@ -108,23 +108,24 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
     sorted_results = sorted(last_run_details.items(), key=lambda item: item[1]['total'], reverse=True)
     user_rank = next((i for i, (name, _) in enumerate(sorted_results, 1) if name == 'user'), -1)
     promotion_status = "成功晋级！" if 1 <= user_rank <= promotion_slots else "未能晋级。"
-    
+
     table_html = f"""<div style="text-align:center; font-size:1.2em; margin-bottom:10px;">你在该轮模拟中排名第 {user_rank}，<b>{promotion_status}</b></div><table style="width:95%; margin:auto; border-collapse:collapse; font-size:14px;"><tr style="background-color:#f2f2f2;"><th style="border:1px solid #ddd; padding:8px;">排名</th><th style="border:1px solid #ddd; padding:8px;">角色</th><th style="border:1px solid #ddd; padding:8px;">笔试</th><th style="border:1px solid #ddd; padding:8px;">面试</th><th style="border:1px solid #ddd; padding:8px;">总分</th></tr>"""
     for i, (name, scores) in enumerate(sorted_results, 1):
         row_style = "background-color:#d4edda; font-weight:bold;" if name == 'user' else ""
         role_name = "<b>你</b>" if name == 'user' else name.replace("opponent_", "对手")
         table_html += f"""<tr style="{row_style}"><td style="border:1px solid #ddd; padding:8px;">{i}</td><td style="border:1px solid #ddd; padding:8px;">{role_name}</td><td style="border:1px solid #ddd; padding:8px;">{scores['written']:.2f}</td><td style="border:1px solid #ddd; padding:8px;">{scores['interview']:.2f}</td><td style="border:1px solid #ddd; padding:8px;"><b>{scores['total']:.2f}</b></td></tr>"""
     table_html += "</table>"
-    
+
     return fig, face, promo_text, table_html
 
 # --- 3. Build UI with Gradio ---
+# FIX: Removed theme=gr.themes.Soft() for compatibility with older Gradio versions.
 with gr.Blocks(title="考试晋级率模拟器") as demo:
     gr.Markdown("# 交互式考试晋级率模拟器")
     gr.Markdown("调整下方参数，实时模拟您在考试中的晋级概率。")
-    
+
     inputs_list = []
-    
+
     with gr.Row():
         exam_type_dd = gr.Dropdown(list(EXAM_CONFIG.keys()), value="事业单位", label="选择考试类型")
         total_participants_num = gr.Number(value=3, label="总参与人数", minimum=2, maximum=9, step=1)
@@ -143,30 +144,47 @@ with gr.Blocks(title="考试晋级率模拟器") as demo:
     exam_type_dd.change(fn=update_slider_max_val, inputs=exam_type_dd, outputs=user_written_slider)
 
     gr.Markdown("--- \n ### 对手成绩（选填）")
-    
+
     opponent_inputs_list = []
+    opponent_rows_list = []
+    with gr.Blocks():
+        for i in range(8):
+            with gr.Row(visible=(i<2), elem_id=f"opponent-row-{i}") as row:
+                w = gr.Number(label=f"对手{i+1}笔试", value=0, min=0, max=300)
+                iv = gr.Number(label=f"对手{i+1}面试", value=0, min=0, max=100)
     opponent_blocks_list = []
-    # FIX: Removed the incorrect nested gr.Blocks() context manager.
-    # This was the main cause of the UI breaking.
-    for i in range(8):
-        with gr.Row(visible=(i<2), elem_id=f"opponent-row-{i}") as row:
-            w = gr.Number(label=f"对手{i+1}笔试", value=0, minimum=0, maximum=300)
-            iv = gr.Number(label=f"对手{i+1}面试", value=0, minimum=0, maximum=100)
-            opponent_inputs_list.extend([w, iv])
-            opponent_blocks_list.append(row)
-    
+    # MODIFICATION: Changed layout to vertical columns within horizontal rows.
+    with gr.Row():
+        for i in range(4): # First row for opponents 1-4
+            with gr.Column(visible=(i<2), min_width=160) as col:
+                w = gr.Number(label=f"对手{i+1}笔试", value=0, minimum=0, maximum=300)
+                iv = gr.Number(label=f"对手{i+1}面试", value=0, minimum=0, maximum=100)
+                opponent_inputs_list.extend([w, iv])
+                opponent_blocks_list.append(col)
+
+    with gr.Row():
+        for i in range(4, 8): # Second row for opponents 5-8
+            with gr.Column(visible=False, min_width=160) as col:
+                w = gr.Number(label=f"对手{i+1}笔试", value=0, minimum=0, maximum=300)
+                iv = gr.Number(label=f"对手{i+1}面试", value=0, minimum=0, maximum=100)
+                opponent_inputs_list.extend([w, iv])
+                opponent_rows_list.append(row)
+                opponent_blocks_list.append(col)
+
     all_inputs_list = inputs_list + opponent_inputs_list
 
     def update_opponent_visibility_ui(num_total):
+        num_opponents = int(num_total) - 1
         num_opponents = int(num_total) - 1 if num_total else 2
         return [gr.update(visible=(i < num_opponents)) for i in range(8)]
-    
+
+    total_participants_num.change(fn=update_opponent_visibility_ui, inputs=total_participants_num, outputs=opponent_rows_list)
     total_participants_num.change(fn=update_opponent_visibility_ui, inputs=total_participants_num, outputs=opponent_blocks_list)
 
     with gr.Row():
         face_output_tb = gr.Textbox(label="模拟心情", interactive=False, text_align="center", scale=1)
         plot_output_pl = gr.Plot(label="概率图", scale=2)
-    
+
     promo_text_output_tb = gr.Textbox(label="模拟统计", interactive=False)
     html_output_html = gr.HTML()
 
@@ -174,12 +192,12 @@ with gr.Blocks(title="考试晋级率模拟器") as demo:
 
     all_triggers = inputs_list + opponent_inputs_list
     for component in all_triggers:
-        # IMPROVEMENT: Added show_progress="full" to give user feedback during calculation.
+        component.change(fn=run_simulation, inputs=all_inputs_list, outputs=outputs_list)
         component.change(fn=run_simulation, inputs=all_inputs_list, outputs=outputs_list, show_progress="full")
-    
+
+    demo.load(fn=run_simulation, inputs=all_inputs_list, outputs=outputs_list)
     demo.load(fn=run_simulation, inputs=all_inputs_list, outputs=outputs_list, show_progress="full")
 
-# --- 4. Launch the App ---
+# --- 4. Launch the App ---More actions
 if __name__ == "__main__":
     demo.launch()
-
