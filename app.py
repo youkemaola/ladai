@@ -40,6 +40,15 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
         interview_score = opponents_scores[i+1] if opponents_scores[i+1] and opponents_scores[i+1] > 0 else None
         opponent_known_scores.append({'written': written_score, 'interview': interview_score})
 
+    # --- CHANGE 2: Conditional Logic for Opponent 1 Score ---
+    highlight_opp1 = False
+    # Check if there is at least one opponent
+    if total_participants > 1 and user_written != written_cutoff:
+        # If user's score is not the cutoff, force opponent 1 to be the cutoff score for this simulation
+        opponent_known_scores[0]['written'] = written_cutoff
+        highlight_opp1 = True
+
+    # --- Simulation Logic (unchanged) ---
     promotion_count = 0
     user_total_score = config['score_formula'](user_written, user_interview)
     
@@ -90,25 +99,34 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
     if 'current_run_details' in locals():
         last_run_details = current_run_details
 
+    # --- Prepare outputs for Gradio ---
     probability = promotion_count / NUM_SIMULATIONS
-    fig = go.Figure(data=[go.Bar(y=[probability], x=['晋级概率'], text=[f'{probability:.2%}'], textposition='auto')])
-    fig.update_layout(yaxis_range=[0,1], yaxis_tickformat=".0%", title_text="晋级概率", title_x=0.5)
+    
+    # --- CHANGE 1: Text update ---
+    fig = go.Figure(data=[go.Bar(y=[probability], x=['上岸概率'], text=[f'{probability:.2%}'], textposition='auto')])
+    fig.update_layout(yaxis_range=[0,1], yaxis_tickformat=".0%", title_text="上岸概率", title_x=0.5)
     
     if probability > 0.5: face = '😂'
     elif probability > 0.1: face = '🙂'
     else: face = '😭'
 
-    promo_text = f"在 {NUM_SIMULATIONS} 次模拟中，你成功晋级了 {promotion_count} 次。"
+    promo_text = f"在 {NUM_SIMULATIONS} 次模拟中，你成功上岸了 {promotion_count} 次。"
 
     sorted_results = sorted(last_run_details.items(), key=lambda item: item[1]['total'], reverse=True)
     user_rank = next((i for i, (name, _) in enumerate(sorted_results, 1) if name == 'user'), -1)
-    promotion_status = "成功晋级！" if 1 <= user_rank <= promotion_slots else "未能晋级。"
+    promotion_status = "成功上岸！" if 1 <= user_rank <= promotion_slots else "未能上岸。"
     
     table_html = f"""<div style="text-align:center; font-size:1.2em; margin-bottom:10px;">你在该轮模拟中排名第 {user_rank}，<b>{promotion_status}</b></div><table style="width:95%; margin:auto; border-collapse:collapse; font-size:14px;"><tr style="background-color:#f2f2f2;"><th style="border:1px solid #ddd; padding:8px;">排名</th><th style="border:1px solid #ddd; padding:8px;">角色</th><th style="border:1px solid #ddd; padding:8px;">笔试</th><th style="border:1px solid #ddd; padding:8px;">面试</th><th style="border:1px solid #ddd; padding:8px;">总分</th></tr>"""
     for i, (name, scores) in enumerate(sorted_results, 1):
         row_style = "background-color:#d4edda; font-weight:bold;" if name == 'user' else ""
         role_name = "<b>你</b>" if name == 'user' else name.replace("opponent_", "对手")
-        table_html += f"""<tr style="{row_style}"><td style="border:1px solid #ddd; padding:8px;">{i}</td><td style="border:1px solid #ddd; padding:8px;">{role_name}</td><td style="border:1px solid #ddd; padding:8px;">{scores['written']:.2f}</td><td style="border:1px solid #ddd; padding:8px;">{scores['interview']:.2f}</td><td style="border:1px solid #ddd; padding:8px;"><b>{scores['total']:.2f}</b></td></tr>"""
+        
+        # --- CHANGE 2: Highlight Logic ---
+        written_score_cell = f"<td style='border:1px solid #ddd; padding:8px;'>{scores['written']:.2f}</td>"
+        if highlight_opp1 and name == "opponent_1":
+            written_score_cell = f"<td style='border:1px solid #ddd; padding:8px; background-color:#fff8c4; color:black;'>{scores['written']:.2f} (进面分)</td>"
+
+        table_html += f"""<tr style="{row_style}"><td style="border:1px solid #ddd; padding:8px;">{i}</td><td style="border:1px solid #ddd; padding:8px;">{role_name}</td>{written_score_cell}<td style="border:1px solid #ddd; padding:8px;">{scores['interview']:.2f}</td><td style="border:1px solid #ddd; padding:8px;"><b>{scores['total']:.2f}</b></td></tr>"""
     table_html += "</table>"
     
     # FIX: Return the raw plotly figure object for older Gradio versions.
@@ -116,17 +134,18 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
     return fig, gr.update(value=face), gr.update(value=promo_text), gr.update(value=table_html)
 
 # --- 3. Build UI with Gradio ---
-with gr.Blocks(title="考试晋级率模拟器") as demo:
-    gr.Markdown("# 交互式考试晋级率模拟器")
-    gr.Markdown("调整下方参数，实时模拟您在考试中的晋级概率。")
+with gr.Blocks(title="考试上岸率模拟") as demo:
+    # --- CHANGE 1: Title update ---
+    gr.Markdown("# 考试上岸率模拟")
+    gr.Markdown("调整下方参数，实时模拟您在考试中的上岸概率。")
     
     inputs_list = []
     
     with gr.Row():
         exam_type_dd = gr.Dropdown(list(EXAM_CONFIG.keys()), value="事业单位", label="选择考试类型")
         total_participants_num = gr.Number(value=3, label="总参与人数", minimum=2, maximum=9, step=1)
-        promotion_slots_num = gr.Number(value=1, label="允许晋级人数", minimum=1, maximum=8, step=1)
-        written_cutoff_num = gr.Number(value=150, label="笔试入围分数")
+        promotion_slots_num = gr.Number(value=1, label="允许上岸人数", minimum=1, maximum=8, step=1)
+        written_cutoff_num = gr.Number(value=150, label="笔试进面分数")
     inputs_list.extend([exam_type_dd, total_participants_num, promotion_slots_num, written_cutoff_num])
 
     with gr.Row():
@@ -139,7 +158,10 @@ with gr.Blocks(title="考试晋级率模拟器") as demo:
         return gr.update(maximum=max_val, value=round(max_val * 0.5))
     exam_type_dd.change(fn=update_slider_max_val, inputs=exam_type_dd, outputs=user_written_slider)
 
-    gr.Markdown("--- \n ### 对手成绩（选填）")
+    # --- CHANGE 3: Add Clear Button ---
+    with gr.Row():
+        gr.Markdown("--- \n ### 对手成绩（选填）")
+        clear_btn = gr.Button("清空所有对手成绩")
     
     opponent_inputs_list = []
     opponent_blocks_list = []
@@ -162,6 +184,11 @@ with gr.Blocks(title="考试晋级率模拟器") as demo:
     
     all_inputs_list = inputs_list + opponent_inputs_list
 
+    # --- CHANGE 3: Logic for Clear Button ---
+    def clear_opponent_scores():
+        return [0] * 16 # There are 8 opponents * 2 fields = 16 input components
+    clear_btn.click(fn=clear_opponent_scores, inputs=None, outputs=opponent_inputs_list)
+
     def update_opponent_visibility_ui(num_total):
         num_opponents = int(num_total) - 1 if num_total else 2
         return [gr.update(visible=(i < num_opponents)) for i in range(8)]
@@ -170,7 +197,7 @@ with gr.Blocks(title="考试晋级率模拟器") as demo:
 
     with gr.Row():
         face_output_tb = gr.Textbox(label="模拟心情", interactive=False, text_align="center", scale=1)
-        plot_output_pl = gr.Plot(label="概率图", scale=2)
+        plot_output_pl = gr.Plot(label="上岸概率图", scale=2)
     
     promo_text_output_tb = gr.Textbox(label="模拟统计", interactive=False)
     html_output_html = gr.HTML()
