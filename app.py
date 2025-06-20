@@ -119,7 +119,6 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
     return fig, face, promo_text, table_html
 
 # --- 3. Build UI with Gradio ---
-# FIX: Removed theme=gr.themes.Soft() for compatibility with older Gradio versions.
 with gr.Blocks(title="考试晋级率模拟器") as demo:
     gr.Markdown("# 交互式考试晋级率模拟器")
     gr.Markdown("调整下方参数，实时模拟您在考试中的晋级概率。")
@@ -146,22 +145,31 @@ with gr.Blocks(title="考试晋级率模拟器") as demo:
     gr.Markdown("--- \n ### 对手成绩（选填）")
     
     opponent_inputs_list = []
-    opponent_rows_list = []
-    with gr.Blocks():
-        for i in range(8):
-            with gr.Row(visible=(i<2), elem_id=f"opponent-row-{i}") as row:
-                w = gr.Number(label=f"对手{i+1}笔试", value=0, min=0, max=300)
-                iv = gr.Number(label=f"对手{i+1}面试", value=0, min=0, max=100)
+    opponent_blocks_list = []
+    # MODIFICATION: Changed layout to vertical columns within horizontal rows.
+    with gr.Row():
+        for i in range(4): # First row for opponents 1-4
+            with gr.Column(visible=(i<2), min_width=160) as col:
+                w = gr.Number(label=f"对手{i+1}笔试", value=0, minimum=0, maximum=300)
+                iv = gr.Number(label=f"对手{i+1}面试", value=0, minimum=0, maximum=100)
                 opponent_inputs_list.extend([w, iv])
-                opponent_rows_list.append(row)
+                opponent_blocks_list.append(col)
+
+    with gr.Row():
+        for i in range(4, 8): # Second row for opponents 5-8
+            with gr.Column(visible=False, min_width=160) as col:
+                w = gr.Number(label=f"对手{i+1}笔试", value=0, minimum=0, maximum=300)
+                iv = gr.Number(label=f"对手{i+1}面试", value=0, minimum=0, maximum=100)
+                opponent_inputs_list.extend([w, iv])
+                opponent_blocks_list.append(col)
     
     all_inputs_list = inputs_list + opponent_inputs_list
 
     def update_opponent_visibility_ui(num_total):
-        num_opponents = int(num_total) - 1
+        num_opponents = int(num_total) - 1 if num_total else 2
         return [gr.update(visible=(i < num_opponents)) for i in range(8)]
     
-    total_participants_num.change(fn=update_opponent_visibility_ui, inputs=total_participants_num, outputs=opponent_rows_list)
+    total_participants_num.change(fn=update_opponent_visibility_ui, inputs=total_participants_num, outputs=opponent_blocks_list)
 
     with gr.Row():
         face_output_tb = gr.Textbox(label="模拟心情", interactive=False, text_align="center", scale=1)
@@ -174,9 +182,9 @@ with gr.Blocks(title="考试晋级率模拟器") as demo:
 
     all_triggers = inputs_list + opponent_inputs_list
     for component in all_triggers:
-        component.change(fn=run_simulation, inputs=all_inputs_list, outputs=outputs_list)
+        component.change(fn=run_simulation, inputs=all_inputs_list, outputs=outputs_list, show_progress="full")
     
-    demo.load(fn=run_simulation, inputs=all_inputs_list, outputs=outputs_list)
+    demo.load(fn=run_simulation, inputs=all_inputs_list, outputs=outputs_list, show_progress="full")
 
 # --- 4. Launch the App ---
 if __name__ == "__main__":
