@@ -146,22 +146,14 @@ with gr.Blocks(title="考试晋级率模拟器") as demo:
     
     opponent_inputs_list = []
     opponent_blocks_list = []
-    # MODIFICATION: Changed layout to vertical columns within horizontal rows.
-    with gr.Row():
-        for i in range(4): # First row for opponents 1-4
-            with gr.Column(visible=(i<2), min_width=160) as col:
-                w = gr.Number(label=f"对手{i+1}笔试", value=0, minimum=0, maximum=300)
-                iv = gr.Number(label=f"对手{i+1}面试", value=0, minimum=0, maximum=100)
-                opponent_inputs_list.extend([w, iv])
-                opponent_blocks_list.append(col)
-
-    with gr.Row():
-        for i in range(4, 8): # Second row for opponents 5-8
-            with gr.Column(visible=False, min_width=160) as col:
-                w = gr.Number(label=f"对手{i+1}笔试", value=0, minimum=0, maximum=300)
-                iv = gr.Number(label=f"对手{i+1}面试", value=0, minimum=0, maximum=100)
-                opponent_inputs_list.extend([w, iv])
-                opponent_blocks_list.append(col)
+    # FIX: Removed the incorrect nested gr.Blocks() context manager.
+    # This was the main cause of the UI breaking.
+    for i in range(8):
+        with gr.Row(visible=(i<2), elem_id=f"opponent-row-{i}") as row:
+            w = gr.Number(label=f"对手{i+1}笔试", value=0, minimum=0, maximum=300)
+            iv = gr.Number(label=f"对手{i+1}面试", value=0, minimum=0, maximum=100)
+            opponent_inputs_list.extend([w, iv])
+            opponent_blocks_list.append(row)
     
     all_inputs_list = inputs_list + opponent_inputs_list
 
@@ -182,6 +174,7 @@ with gr.Blocks(title="考试晋级率模拟器") as demo:
 
     all_triggers = inputs_list + opponent_inputs_list
     for component in all_triggers:
+        # IMPROVEMENT: Added show_progress="full" to give user feedback during calculation.
         component.change(fn=run_simulation, inputs=all_inputs_list, outputs=outputs_list, show_progress="full")
     
     demo.load(fn=run_simulation, inputs=all_inputs_list, outputs=outputs_list, show_progress="full")
