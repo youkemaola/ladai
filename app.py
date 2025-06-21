@@ -112,9 +112,14 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
     probability = promotion_count / NUM_SIMULATIONS
     fig = go.Figure(data=[go.Bar(y=[probability], x=['上岸概率'], text=[f'{probability:.2%}'], textposition='auto', marker_color='rgba(55, 126, 229, 0.7)')])
     fig.update_layout(paper_bgcolor='rgba(0,0,0,0)', plot_bgcolor='rgba(0,0,0,0)', yaxis_range=[0,1], yaxis_tickformat=".0%", title_text="上岸概率", title_x=0.5, font_color="white", title_font_color="white", yaxis=dict(gridcolor='rgba(255, 255, 255, 0.2)'), modebar_remove=['toimage', 'zoom', 'pan', 'select', 'lasso2d', 'autoscale'])
-    if probability > 0.5: face = '😂'
-    elif probability > 0.1: face = '🙂'
-    else: face = '😭'
+    if probability >= 0.98:
+        face = '😂😂😂 \n 穿好你的行政夹克，直接去体检上班吧'
+    elif probability > 0.5:
+        face = '😂'
+    elif probability > 0.1:
+        face = '🙂'
+    else:
+        face = '😭'
     promo_text = f"在 {NUM_SIMULATIONS} 次模拟中，你成功上岸了 {promotion_count} 次。"
     table_html = ""
     if last_run_details:
