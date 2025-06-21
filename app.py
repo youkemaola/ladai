@@ -2,85 +2,35 @@ import gradio as gr
 import numpy as np
 import plotly.graph_objects as go
 import asyncio
+from fastapi.staticfiles import StaticFiles # [新增] 导入fastapi的StaticFiles
 
 # ==============================================================================
 # 1. 美化CSS
-# [修改1] 将背景图的URL修改为本地文件路径
+# [修改1] 将CSS中的图片路径修改为新的挂载路径
 # ==============================================================================
 glassmorphism_css = """
-/* 将背景图应用到Gradio应用的根元素上 */
 gradio-app {
-    /* 这里是唯一的CSS改动：将url()中的地址改为本地相对路径 */
-    background-image: url('/file=static/background.jpg') !important;
+    /* 将url()中的地址改为新的挂载路径 */
+    background-image: url('/static/background.jpg') !important;
     background-size: cover !important;
     background-position: center !important;
     background-repeat: no-repeat !important;
     background-attachment: fixed !important;
 }
-
-/* ------------------ 以下所有CSS规则保持不变 ------------------ */
-.gradio-container {
-    background: none !important;
-}
-
-.gradio-container .gr-panel, 
-.gradio-container .gr-button, 
-.gradio-container .gr-box,
-.gradio-container .gr-input,
-.gradio-container .gr-plot {
-    background: rgba(255, 255, 255, 0.1) !important; 
-    backdrop-filter: blur(20px) !important;
-    -webkit-backdrop-filter: blur(20px) !important;
-    border-radius: 15px !important;
-    border: 1px solid rgba(255, 255, 255, 0.15) !important;
-    box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1) !important;
-}
-
-.gradio-container .gr-input-wrap input, 
-.gradio-container .gr-input-wrap textarea,
-.gradio-container .gr-slider-input input {
-    background: transparent !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    box-shadow: none !important;
-}
-
-.gradio-container .gr-button {
-    color: #FFFFFF !important;
-    font-weight: bold;
-}
-
-.gradio-container .gr-label, 
-.gradio-container .gr-info,
-.gradio-container .markdown h1, 
-.gradio-container .markdown h2, 
-.gradio-container .markdown p {
-    color: #FFFFFF !important;
-    text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.6);
-}
-
-.gradio-container .gr-plot .plotly {
-    background-color: transparent !important;
-}
-.gradio-container .gr-plot .plotly .xtick text,
-.gradio-container .gr-plot .plotly .ytick text {
-    fill: #FFFFFF !important;
-    text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
-}
+/* 其他CSS规则不变... */
+.gradio-container { background: none !important; }
+.gradio-container .gr-panel, .gradio-container .gr-button, .gradio-container .gr-box, .gradio-container .gr-input, .gradio-container .gr-plot { background: rgba(255, 255, 255, 0.1) !important; backdrop-filter: blur(20px) !important; -webkit-backdrop-filter: blur(20px) !important; border-radius: 15px !important; border: 1px solid rgba(255, 255, 255, 0.15) !important; box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1) !important; }
+.gradio-container .gr-input-wrap input, .gradio-container .gr-input-wrap textarea, .gradio-container .gr-slider-input input { background: transparent !important; color: #FFFFFF !important; border: none !important; box-shadow: none !important; }
+.gradio-container .gr-button { color: #FFFFFF !important; font-weight: bold; }
+.gradio-container .gr-label, .gradio-container .gr-info, .gradio-container .markdown h1, .gradio-container .markdown h2, .gradio-container .markdown p { color: #FFFFFF !important; text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.6); }
+.gradio-container .gr-plot .plotly { background-color: transparent !important; }
+.gradio-container .gr-plot .plotly .xtick text, .gradio-container .gr-plot .plotly .ytick text { fill: #FFFFFF !important; text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7); }
 """
 
-# --- 参数和模拟逻辑部分（完全未作改动）---
+# --- 参数和模拟逻辑部分---
 EXAM_CONFIG = {
-    '事业单位': {
-        'written_max': 300, 'written_mu': 160.0, 'written_sigma': 25.80,
-        'interview_mu': 74.0, 'interview_sigma': 4.86,
-        'score_formula': lambda w, i: w / 3.0 + i
-    },
-    '公务员': {
-        'written_max': 200, 'written_mu': 134.0, 'written_sigma': 6.47,
-        'interview_mu': 74.0, 'interview_sigma': 4.78,
-        'score_formula': lambda w, i: w / 2.0 + i
-    }
+    '事业单位': { 'written_max': 300, 'written_mu': 160.0, 'written_sigma': 25.80, 'interview_mu': 74.0, 'interview_sigma': 4.86, 'score_formula': lambda w, i: w / 3.0 + i },
+    '公务员': { 'written_max': 200, 'written_mu': 134.0, 'written_sigma': 6.47, 'interview_mu': 74.0, 'interview_sigma': 4.78, 'score_formula': lambda w, i: w / 2.0 + i }
 }
 NUM_SIMULATIONS = 10000
 
@@ -168,9 +118,15 @@ async def run_simulation(exam_type, total_participants, promotion_slots, written
         table_html += "</table>"
     return fig, gr.update(value=face), gr.update(value=promo_text), gr.update(value=table_html)
 
-# --- UI界面构建部分（完全未作改动）---
-# [修改2] 在 gr.Blocks 中添加 allowed_paths 参数
-with gr.Blocks(title="考试上岸率模拟", css=glassmorphism_css, allowed_paths=["static"]) as demo:
+# --- UI界面构建部分 ---
+# [修改2] 移除 gr.Blocks 中的 allowed_paths 参数
+with gr.Blocks(title="考试上岸率模拟", css=glassmorphism_css) as demo:
+    
+    # [修改3] 在Blocks内部第一行，手动挂载静态文件夹
+    # 这行代码的作用和新版本中的 allowed_paths=["static"] 完全一样
+    demo.mount("/static", StaticFiles(directory="static"), name="static")
+    
+    # --- 以下UI布局代码完全未作改动 ---
     gr.Markdown("# 考试上岸率模拟")
     gr.Markdown("调整下方参数，实时模拟您在考试中的上岸概率。")
     inputs_list = []
